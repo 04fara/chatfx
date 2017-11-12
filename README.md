@@ -1,8 +1,8 @@
 # ChatFX
 
-![**ChatFXlogo**](https://i.imgur.com/qnGdeUR.png)
-
 **ChatFX** is a single client-server chat app written in Java using JavaFX.
+
+![**ChatFXscreenshot**](https://i.imgur.com/qnGdeUR.png)
 
 ## License
 
