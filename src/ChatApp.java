@@ -1,3 +1,7 @@
+import algorithms.Huffman;
+import algorithms.LZ78;
+import algorithms.RLE;
+import algorithms.Repetition;
 import javafx.application.*;
 import javafx.geometry.Rectangle2D;
 import javafx.stage.*;
@@ -8,6 +12,8 @@ import javafx.scene.paint.Color;
 import javafx.collections.*;
 import javafx.geometry.Pos;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.file.*;
@@ -82,7 +88,7 @@ public class ChatApp extends Application {
     }
 
     private static String getFileExtension(String fileName) {
-        return fileName.substring(fileName.lastIndexOf(".") + 1);
+        return fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
     }
 
     private void attach(final Stage stage, FileChooser fileChooser) {
@@ -90,7 +96,16 @@ public class ChatApp extends Application {
             File selectedFile;
             if ((selectedFile = fileChooser.showOpenDialog(stage)) != null) {
                 String ext = getFileExtension(selectedFile.getName());
-                connection.send(new Message(ext, Files.readAllBytes(selectedFile.toPath())));
+                //TODO compression and encoding depending on extension
+                if (ext.equals("bmp") || ext.equals("tiff") || ext.equals("gif")) {
+                    BufferedImage img = ImageIO.read(new File(selectedFile.toPath().toString()));
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    ImageIO.write(img, ext, baos);
+                    byte[] bytes = baos.toByteArray();
+                    if (ext.equals("tiff")) bytes = new LZ78().compress(bytes);
+                    else bytes = new RLE().compress(bytes);
+                    connection.send(new Message(ext, new Repetition(5).encode(bytes)));
+                } else connection.send(new Message(ext, new Repetition(5).encode(new Huffman().compress(Files.readAllBytes(selectedFile.toPath())))));
                 messages.add(ext + " file was sent");
             }
         } catch (Exception e) {
@@ -103,9 +118,11 @@ public class ChatApp extends Application {
             String message = (isServer ? "Server: " : "Client: ") + inputField.getText();
             inputField.clear();
             try {
-                connection.send(new Message("-1", message.getBytes()));
+                //TODO compression and encoding
+                connection.send(new Message("-1", new Repetition(5).encode(new Huffman().compress(message.getBytes()))));
                 messages.add(message);
             } catch (Exception e) {
+                e.printStackTrace();
                 messages.add(message + " (Failed to send!)");
             }
         }
@@ -115,19 +132,34 @@ public class ChatApp extends Application {
         if (message != null && message.getExtension() != null)
             if (!message.getExtension().equals("-1")) {
                 try {
+                    //TODO decoding and decompression depending on extension
+                    String ext = message.getExtension();
+                    byte[] bytes = new Repetition(5).decode(message.getData());
                     String path = "file.";
                     int i = 1;
-                    while (Files.exists(Paths.get(path + message.getExtension())))
+                    while (Files.exists(Paths.get(path + ext)))
                         path = "file (" + i++ + ").";
-                    FileOutputStream fileOutputStream = new FileOutputStream(new File(path + message.getExtension()));
-                    fileOutputStream.write(message.getData());
-                    fileOutputStream.close();
-                    messages.add(message.getExtension() + " file was received");
+                    if (ext.equals("bmp") || ext.equals("tiff") || ext.equals("gif")) {
+                        if (ext.equals("tiff")) bytes = new LZ78().decompress(bytes);
+                        else bytes = new RLE().decompress(bytes);
+                        ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
+                        BufferedImage c = ImageIO.read(bais);
+                        ImageIO.write(c, ext, new File(path + ext));
+                    } else {
+                        bytes = new Huffman().decompress(bytes);
+                        FileOutputStream fileOutputStream = new FileOutputStream(new File(path + ext));
+                        fileOutputStream.write(bytes);
+                        fileOutputStream.close();
+                    }
+                    messages.add(ext + " file was received");
                 } catch (Exception ex) {
                     System.out.println("SOMETHING WENT WRONG!");
                     ex.printStackTrace();
                 }
-            } else messages.add(new String(message.getData(), Charset.forName("UTF-8")));
+            } else {
+                //TODO decoding and decompression
+                messages.add(new String(new Huffman().decompress(new Repetition(5).decode(message.getData())), Charset.forName("UTF-8")));
+            }
         else messages.add("Connection closed");
     }
 

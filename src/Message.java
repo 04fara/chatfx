@@ -13,6 +13,10 @@ class Message implements Serializable {
         return extension;
     }
 
+    void setData(byte[] data) {
+        this.data = data;
+    }
+
     byte[] getData() {
         return data;
     }
